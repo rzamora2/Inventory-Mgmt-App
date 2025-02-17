@@ -1,25 +1,45 @@
 'use client';
 import React, { useState, useEffect } from "react";
-import { firestore } from "@/firebase";
-import { Box, Button, Modal, Stack, Typography, InputAdornment } from "@mui/material";
-import Tooltip from '@mui/material/Tooltip'; // Import Tooltip from MUI
-import { collection, getDocs, query, setDoc, getDoc, doc, deleteDoc } from "firebase/firestore";
+import { firestore, auth } from "@/firebase";
+import { 
+  Box, 
+  Button, 
+  Modal, 
+  Stack, 
+  Typography, 
+  InputAdornment, 
+  TextField,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle 
+} from "@mui/material";
+import Tooltip from '@mui/material/Tooltip';
+import { 
+  collection, 
+  getDocs, 
+  query, 
+  setDoc, 
+  getDoc, 
+  doc, 
+  deleteDoc 
+} from "firebase/firestore";
+import { 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from "firebase/auth";
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import IconButton from '@mui/material/IconButton';
-import MenuItem from '@mui/material/MenuItem';
-import Menu from '@mui/material/Menu';
-import MenuIcon from '@mui/icons-material/Menu';
-import MoreIcon from '@mui/icons-material/MoreVert';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import Autocomplete from '@mui/material/Autocomplete';
 import { styled, alpha } from '@mui/material/styles';
-import TextField from '@mui/material/TextField';
+import SearchIcon from '@mui/icons-material/Search';
 import parse from 'autosuggest-highlight/parse';
 import match from 'autosuggest-highlight/match';
-import SearchIcon from '@mui/icons-material/Search';
 
-// Styled components for the search bar
+// Styled component for the search bar
 const Search = styled('div')(({ theme }) => ({
   position: 'relative',
   borderRadius: theme.shape.borderRadius,
@@ -36,34 +56,25 @@ const Search = styled('div')(({ theme }) => ({
   },
 }));
 
-function PrimarySearchAppBar({ handleOpen, inventory, onSelectItem, setItemName, itemName }) {
+// Modified AppBar component with Auth buttons
+function PrimarySearchAppBar({ 
+  handleOpen, 
+  inventory, 
+  onSelectItem, 
+  setItemName, 
+  itemName, 
+  user, 
+  openSignInModal, 
+  handleSignOut 
+}) {
   const [anchorEl, setAnchorEl] = useState(null);
   const [mobileMoreAnchorEl, setMobileMoreAnchorEl] = useState(null);
 
-  const isMenuOpen = Boolean(anchorEl);
-  const isMobileMenuOpen = Boolean(mobileMoreAnchorEl);
-
-  const handleProfileMenuOpen = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMobileMenuClose = () => {
-    setMobileMoreAnchorEl(null);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-    handleMobileMenuClose();
-  };
-
-  const handleMobileMenuOpen = (event) => {
-    setMobileMoreAnchorEl(event.currentTarget);
-  };
-
-  // Handle Enter key press for search functionality
   const handleKeyDown = (event) => {
     if (event.key === 'Enter') {
-      const matchedItem = inventory.find(item => item.name.toLowerCase() === itemName.toLowerCase());
+      const matchedItem = inventory.find(
+        (item) => item.name.toLowerCase() === itemName.toLowerCase()
+      );
       if (matchedItem) {
         onSelectItem(matchedItem);
         handleOpen();
@@ -77,40 +88,53 @@ function PrimarySearchAppBar({ handleOpen, inventory, onSelectItem, setItemName,
     <Box sx={{ flexGrow: 1 }}>
       <AppBar position="static">
         <Toolbar>
-          {/* Replacing Menu Button with Add New Item Button */}
-          <Tooltip title="Add New Item">  {/* Tooltip for hover text */}
-            <IconButton
-              size="large"
-              edge="start"
-              color="inherit"
-              aria-label="add new item"
-              sx={{ mr: 2 }}
-              onClick={handleOpen}  // Opens the modal directly
-            >
-              <AddCircleIcon />
-            </IconButton>
-          </Tooltip>
+        <Tooltip title="Add New Item">
+  <span>
+    <IconButton
+      size="large"
+      edge="start"
+      color="inherit"
+      aria-label="add new item"
+      sx={{ mr: 2 }}
+      onClick={handleOpen}
+      disabled={!user} // Disable if not signed in
+    >
+      <AddCircleIcon />
+    </IconButton>
+  </span>
+</Tooltip>
 
           <Typography
             variant="h6"
             noWrap
             component="div"
-            sx={{ display: { xs: 'none', sm: 'block' } }}
+            sx={{ flexGrow: 1, display: { xs: 'none', sm: 'block' } }}
           >
             Inventory Management Tool
           </Typography>
-          
+          {/* Auth buttons */}
+          {user ? (
+            <Button color="inherit" onClick={handleSignOut}>
+              Sign Out
+            </Button>
+          ) : (
+            <Button color="inherit" onClick={openSignInModal}>
+              Sign In
+            </Button>
+          )}
           <Search>
             <Autocomplete
               id="highlights-demo"
               sx={{ width: 400 }}
-              freeSolo  // Allow free text input
-              options={inventory.map(item => item.name)}  // Only pass names as options
-              getOptionLabel={(option) => typeof option === 'string' ? option : option.name}
+              freeSolo
+              options={inventory.map((item) => item.name)}
+              getOptionLabel={(option) =>
+                typeof option === 'string' ? option : option.name
+              }
               onInputChange={(event, newInputValue) => {
-                setItemName(newInputValue); // Update new item name
+                setItemName(newInputValue);
               }}
-              onKeyDown={handleKeyDown} 
+              onKeyDown={handleKeyDown}
               renderInput={(params) => (
                 <TextField
                   {...params}
@@ -127,9 +151,9 @@ function PrimarySearchAppBar({ handleOpen, inventory, onSelectItem, setItemName,
                   }}
                   sx={{
                     '& .MuiOutlinedInput-root': {
-                      paddingRight: '48px', 
-                      borderRadius: '4px', 
-                      backgroundColor: alpha('#fff', 0.15), 
+                      paddingRight: '48px',
+                      borderRadius: '4px',
+                      backgroundColor: alpha('#fff', 0.15),
                       '&:hover': {
                         backgroundColor: alpha('#fff', 0.25),
                       },
@@ -144,7 +168,6 @@ function PrimarySearchAppBar({ handleOpen, inventory, onSelectItem, setItemName,
                 const { key, ...optionProps } = props;
                 const matches = match(option, inputValue, { insideWords: true });
                 const parts = parse(option, matches);
-
                 return (
                   <li {...optionProps}>
                     <div>
@@ -172,9 +195,10 @@ function PrimarySearchAppBar({ handleOpen, inventory, onSelectItem, setItemName,
 }
 
 export default function Home() {
+  // Inventory-related states and functions remain as before
   const [inventory, setInventory] = useState([]);
   const [open, setOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState(null); // State for selected item
+  const [selectedItem, setSelectedItem] = useState(null);
   const [itemName, setItemName] = useState('');
 
   const updateInventory = async () => {
@@ -193,21 +217,18 @@ export default function Home() {
   const addItem = async (item) => {
     const docRef = doc(collection(firestore, 'inventory'), item);
     const docSnap = await getDoc(docRef);
-
     if (docSnap.exists()) {
       const { count } = docSnap.data();
       await setDoc(docRef, { count: count + 1 });
     } else {
       await setDoc(docRef, { count: 1 });
     }
-
     await updateInventory();
   };
-  
+
   const removeItem = async (item) => {
     const docRef = doc(collection(firestore, 'inventory'), item);
     const docSnap = await getDoc(docRef);
-
     if (docSnap.exists()) {
       const { count } = docSnap.data();
       if (count === 1) {
@@ -216,7 +237,6 @@ export default function Home() {
         await setDoc(docRef, { count: count - 1 });
       }
     }
-
     await updateInventory();
   };
 
@@ -224,101 +244,97 @@ export default function Home() {
     updateInventory();
   }, []);
 
-  const handleOpen = () => setOpen(true);  // Function to open the modal
+  const handleOpen = () => setOpen(true);
   const handleClose = () => {
     setOpen(false);
-    setSelectedItem(null); // Reset selected item
-    setItemName(''); // Clear item name
+    setSelectedItem(null);
+    setItemName('');
   };
 
-  // Handle selection of item from autocomplete
   const handleSelectItem = (item) => {
     if (item) {
-      setSelectedItem(item);  // Set the selected item
-      handleOpen();           // Open the modal to display item details
+      setSelectedItem(item);
+      handleOpen();
     }
   };
 
+  // --- Firebase Auth integration ---
+  const [user, setUser] = useState(null);
+  const [signInOpen, setSignInOpen] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return unsubscribe;
+  }, []);
+
+  const openSignInModal = () => {
+    setSignInOpen(true);
+    setAuthError('');
+  };
+
+  const closeSignInModal = () => {
+    setSignInOpen(false);
+    setEmail('');
+    setPassword('');
+    setAuthError('');
+  };
+
+  const handleSignIn = async () => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      closeSignInModal();
+    } catch (error) {
+      setAuthError(error.message);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Sign-out error:", error);
+    }
+  };
+  // --- End Firebase Auth integration ---
+
   return (
-    <Box 
-      display="flex"
-      flexDirection="column"
-      alignItems="center"
-      justifyContent="center"
-      minHeight="100vh"
-      sx={{ gap: '0px' }} 
-    >
-      {/* Pass handleSelectItem to PrimarySearchAppBar */}
+    <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" minHeight="100vh" sx={{ gap: '0px' }}>
       <PrimarySearchAppBar
         inventory={inventory}
         onSelectItem={handleSelectItem}
         handleOpen={handleOpen}
-        setItemName={setItemName}  // Pass setItemName function
-        itemName={itemName}  // Pass itemName state
-        setSelectedItem={setSelectedItem} // Reset selected item
+        setItemName={setItemName}
+        itemName={itemName}
+        user={user}
+        openSignInModal={openSignInModal}
+        handleSignOut={handleSignOut}
       />
       <Modal open={open} onClose={handleClose}>
-        <Box
-          position="absolute"
-          top="50%"
-          left="50%"
-          width={400}
-          bgcolor="white"
-          border="2px solid #000"
-          boxShadow={24}
-          p={4}
-          display="flex"
-          flexDirection="column"
-          gap={3}
-          sx={{
-            transform: 'translate(-50%, -50%)',
-          }}
-        >
-          {selectedItem ? ( // Display selected item details if available
+        <Box position="absolute" top="50%" left="50%" width={400} bgcolor="white" border="2px solid #000" boxShadow={24} p={4} display="flex" flexDirection="column" gap={3} sx={{ transform: 'translate(-50%, -50%)' }}>
+          {selectedItem ? (
             <>
               <Typography variant="h6">{selectedItem.name}</Typography>
               <Typography variant="body1">Count: {selectedItem.count}</Typography>
               <Stack direction="row" spacing={2}>
-                <Button
-                  variant="contained"
-                  onClick={() => {
-                    addItem(selectedItem.name);
-                  }}
-                >
+                <Button variant="contained" onClick={() => { addItem(selectedItem.name); }}>
                   Add
                 </Button>
-                <Button
-                  variant="contained"
-                  onClick={() => {
-                    removeItem(selectedItem.name);
-                  }}
-                >
+                <Button variant="contained" onClick={() => { removeItem(selectedItem.name); }}>
                   Remove
                 </Button>
               </Stack>
             </>
           ) : (
-            // UI for adding a new item if no item is selected
             <>
               <Typography variant="h6">Add New Item</Typography>
               <Stack width="100%" direction="row" spacing={2}>
-                <TextField
-                  variant="outlined"
-                  fullWidth
-                  label="Item Name"
-                  value={itemName}
-                  onChange={(e) => {
-                    setItemName(e.target.value);
-                  }}
-                />
-                <Button
-                  variant="outlined"
-                  onClick={() => {
-                    addItem(itemName);
-                    setItemName('');
-                    handleClose();
-                  }}
-                >
+                <TextField variant="outlined" fullWidth label="Item Name" value={itemName} onChange={(e) => { setItemName(e.target.value); }} />
+                <Button variant="outlined" onClick={() => { addItem(itemName); setItemName(''); handleClose(); }}>
                   Add
                 </Button>
               </Stack>
@@ -327,39 +343,46 @@ export default function Home() {
         </Box>
       </Modal>
 
-      {/* Centering Container */}
-      <Box
-        display="flex"
-        justifyContent="center"
-        alignItems="center"
-        height="100vh"
-        flexGrow={1}
-      >
+      {/* Sign In Modal */}
+      <Dialog open={signInOpen} onClose={closeSignInModal}>
+        <DialogTitle>Sign In</DialogTitle>
+        <DialogContent>
+          <TextField 
+            autoFocus
+            margin="dense"
+            label="Email Address"
+            type="email"
+            fullWidth
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <TextField 
+            margin="dense"
+            label="Password"
+            type="password"
+            fullWidth
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          {authError && <Typography color="error">{authError}</Typography>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeSignInModal}>Cancel</Button>
+          <Button onClick={handleSignIn}>Sign In</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Inventory List */}
+      <Box display="flex" justifyContent="center" alignItems="center" height="100vh" flexGrow={1}>
         <Box border="2px solid #333" mt={2}>
-          <Box
-            width="800px"
-            height="100px"
-            bgcolor="#ADD8E6"
-            display="flex"
-            alignItems="center"
-            justifyContent="center"
-          >
+          <Box width="800px" height="100px" bgcolor="#ADD8E6" display="flex" alignItems="center" justifyContent="center">
             <Typography variant="h2" color="#333">
               Inventory Items
             </Typography>
           </Box>
           <Stack width="800px" height="700px" spacing={2} overflow="auto">
             {inventory.map(({ name, count }) => (
-              <Box
-                key={name}
-                width="100%"
-                minHeight="150px"
-                display="flex"
-                alignItems="center"
-                justifyContent="space-between"
-                bgcolor="#f0f0f0"
-                padding={5}
-              >
+              <Box key={name} width="100%" minHeight="150px" display="flex" alignItems="center" justifyContent="space-between" bgcolor="#f0f0f0" padding={5}>
                 <Typography variant="h3" color="#333" textAlign="center">
                   {name.charAt(0).toUpperCase() + name.slice(1)}
                 </Typography>
@@ -367,20 +390,10 @@ export default function Home() {
                   {count}
                 </Typography>
                 <Stack direction="row" spacing={2}>
-                  <Button
-                    variant="contained"
-                    onClick={() => {
-                      addItem(name);
-                    }}
-                  >
+                  <Button variant="contained" onClick={() => { addItem(name); }}>
                     Add
                   </Button>
-                  <Button
-                    variant="contained"
-                    onClick={() => {
-                      removeItem(name);
-                    }}
-                  >
+                  <Button variant="contained" onClick={() => { removeItem(name); }}>
                     Remove
                   </Button>
                 </Stack>
